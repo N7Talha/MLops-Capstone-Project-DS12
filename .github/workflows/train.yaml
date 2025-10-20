@@ -20,6 +20,6 @@ jobs:
           pip install -e .
 
       - name: Train model
-        run: python -m src.train
+        run: PYTHONPATH=$GITHUB_WORKSPACE python src/train.py
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
