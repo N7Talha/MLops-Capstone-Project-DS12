@@ -3,7 +3,7 @@ name: Train-Register-Deploy
 on:
   push:
     branches: [ main ]
-    paths: [ 'src/**', 'configs/**' ]
+  workflow_dispatch:          # optional manual trigger
 
 jobs:
   train:
@@ -15,7 +15,50 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m src.train
         env:
-          PYTHONPATH: ${{ github.workspace }}
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-
+           PYTHONPATH: ${{ github.workspace }}
+           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           
+
+  deploy:                       # ← top-level key, same column as "train"
+    needs: train
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      - name: Build & push API
+        run: |
+          docker build -f api/Dockerfile -t us-central1-docker.pkg.dev/mlops-capstone-ds12/mlops-repo/api:latest .
+          docker push    us-central1-docker.pkg.dev/mlops-capstone-ds12/mlops-repo/api:latest
+
+      - name: Build & push frontend
+        run: |
+          docker build -f frontend/Dockerfile -t us-central1-docker.pkg.dev/mlops-capstone-ds12/mlops-repo/frontend:latest .
+          docker push    us-central1-docker.pkg.dev/mlops-capstone-ds12/mlops-repo/frontend:latest
+
+      - name: Deploy API
+        run: |
+          gcloud run deploy heart-api \
+            --image us-central1-docker.pkg.dev/mlops-capstone-ds12/mlops-repo/api:latest \
+            --platform managed --region us-central1 --allow-unauthenticated \
+            --set-env-vars WANDB_API_KEY=${{ secrets.WANDB_API_KEY }}
+
+      - name: Deploy frontend
+        run: |
+          gcloud run deploy heart-frontend \
+            --image us-central1-docker.pkg.dev/mlops-capstone-ds12/mlops-repo/frontend:latest \
+            --platform managed --region us-central1 --allow-unauthenticated \
+            --set-env-vars API_URL=https://heart-api-${{ secrets.GCP_REGION }}.a.run.app
