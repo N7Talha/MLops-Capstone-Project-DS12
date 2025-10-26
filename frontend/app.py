@@ -1,5 +1,5 @@
 import streamlit as st, requests, os
-API = os.getenv("API_URL", "http://localhost:8000")
+API = os.getenv("API_URL", "http://localhost:8080")
 
 st.title("Heart Disease Risk Checker")
 age = st.slider("Age", 20, 90, 50)
